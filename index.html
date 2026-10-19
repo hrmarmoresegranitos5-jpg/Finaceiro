@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Meus Gastos</title>
+<meta name="theme-color" content="#0f6b5c">
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+:root{--bg:#e9eaec;--card:#f6f7f8;--tx:#1b1f23;--mut:#66707a;--acc:#0f6b5c;--bd:#d3d6da;--err:#b3261e;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#14171a;--card:#1d2226;--tx:#e8eaec;--mut:#8f99a3;--acc:#4cc2a8;--bd:#2d343a;--err:#f2827a;color-scheme:dark}}
+*{box-sizing:border-box}
+html{height:100%}
+body{margin:0;min-height:100%;background:var(--bg);color:var(--tx);font:16px/1.4 "Schibsted Grotesk",system-ui,sans-serif;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+main{max-width:520px;margin:0 auto;padding:16px}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0;border-radius:10px;padding:10px 14px;background:var(--acc);color:var(--bg);font-weight:600}
+button.sec{background:transparent;color:var(--mut);border:1px solid var(--bd)}
+input,select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--bd);background:var(--card);margin:0 0 8px}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.nav b{font-size:18px;text-transform:capitalize}
+.nav button{padding:8px 14px}
+.total{font-size:46px;font-weight:800;letter-spacing:-1.5px;margin:6px 0 2px}
+.mut{color:var(--mut);font-size:14px}
+.seg{display:flex;height:12px;border-radius:6px;overflow:hidden;margin:14px 0 10px;background:var(--bd)}
+.cat{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:15px}
+.dot{width:10px;height:10px;border-radius:50%;flex:none}
+.cat span:nth-child(2){flex:1}
+h2{font-size:15px;margin:22px 0 8px;color:var(--mut);font-weight:600}
+.item{display:flex;gap:10px;align-items:center;padding:11px 0;border-bottom:1px solid var(--bd)}
+.item div{flex:1;min-width:0}
+.item .d{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .v{font-weight:600;white-space:nowrap}
+.item .x{background:none;color:var(--mut);padding:4px 8px;font-size:20px}
+.box{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-top:16px}
+.err{color:var(--err);font-size:14px;min-height:20px}
+.row{display:flex;gap:8px}
+.row>*{flex:1}
+.hide{display:none}
+</style>
+</head>
+<body>
+<main>
+  <section id="login" class="hide">
+    <h1>Meus Gastos</h1>
+    <div class="box">
+      <input id="em" type="email" placeholder="E-mail" autocomplete="email">
+      <input id="pw" type="password" placeholder="Senha" autocomplete="current-password">
+      <div class="err" id="lerr"></div>
+      <button id="entrar" style="width:100%">Entrar</button>
+    </div>
+  </section>
+
+  <section id="app" class="hide">
+    <div class="nav">
+      <button class="sec" id="ant" aria-label="Mês anterior">‹</button>
+      <b id="mes"></b>
+      <button class="sec" id="prox" aria-label="Próximo mês">›</button>
+    </div>
+    <div class="total" id="total">R$ 0,00</div>
+    <div class="mut" id="qtd"></div>
+    <div class="seg" id="seg"></div>
+    <div id="cats"></div>
+
+    <h2>Lançamentos</h2>
+    <div id="lista"></div>
+
+    <div class="box">
+      <div class="row">
+        <input id="val" inputmode="decimal" placeholder="Valor (ex: 45,90)">
+        <input id="dt" type="date">
+      </div>
+      <select id="cat"></select>
+      <input id="desc" placeholder="Descrição (opcional)">
+      <div class="err" id="aerr"></div>
+      <button id="salvar" style="width:100%">Salvar gasto</button>
+    </div>
+    <p style="text-align:center;margin-top:18px"><button class="sec" id="sair">Sair</button></p>
+  </section>
+</main>
+
+<script>
+// Preencha com os dados do seu projeto Supabase (Settings > API).
+// A chave "anon" pode ficar aqui: o acesso é protegido pelo login e pelas regras RLS do schema.sql.
+const SUPABASE_URL = 'COLE_AQUI_A_URL_DO_PROJETO';
+const SUPABASE_KEY = 'COLE_AQUI_A_CHAVE_ANON';
+
+const CATS = ['Alimentação','Mercado','Transporte','Moradia','Contas','Saúde','Lazer','Compras','Educação','Outros'];
+const CORES = ['#0f6b5c','#c8782a','#3f6fb5','#8a5fb0','#b8433a','#2f9e8f','#d1a526','#6b7f3a','#c25b8e','#7d8791'];
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const $ = s => document.querySelector(s);
+const brl = v => Number(v).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ymd = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+const cor = c => CORES[Math.max(0, CATS.indexOf(c))] || CORES[9];
+
+let mes = new Date(); mes.setDate(1);
+let itens = [];
+
+$('#cat').innerHTML = CATS.map(c => `<option>${c}</option>`).join('');
+$('#dt').value = ymd(new Date());
+
+function tela(logado){
+  $('#login').classList.toggle('hide', logado);
+  $('#app').classList.toggle('hide', !logado);
+}
+
+async function carregar(){
+  const ini = ymd(mes), fim = ymd(new Date(mes.getFullYear(), mes.getMonth()+1, 1));
+  const { data, error } = await sb.from('gastos').select('*')
+    .gte('data', ini).lt('data', fim)
+    .order('data', {ascending:false}).order('criado_em', {ascending:false});
+  if (error){ $('#aerr').textContent = 'Erro ao carregar: ' + error.message; return; }
+  itens = data; render();
+}
+
+function render(){
+  $('#mes').textContent = mes.toLocaleDateString('pt-BR', {month:'long', year:'numeric'});
+  const total = itens.reduce((s,i) => s + Number(i.valor), 0);
+  $('#total').textContent = brl(total);
+  $('#qtd').textContent = itens.length ? itens.length + ' lançamento' + (itens.length>1?'s':'') + ' no mês' : 'Nenhum gasto neste mês';
+
+  const por = {};
+  itens.forEach(i => por[i.categoria] = (por[i.categoria]||0) + Number(i.valor));
+  const ord = Object.entries(por).sort((a,b) => b[1]-a[1]);
+  $('#seg').innerHTML = ord.map(([c,v]) => `<div style="width:${v/total*100}%;background:${cor(c)}" title="${esc(c)}"></div>`).join('');
+  $('#cats').innerHTML = ord.map(([c,v]) =>
+    `<div class="cat"><i class="dot" style="background:${cor(c)}"></i><span>${esc(c)}</span><span class="mut">${Math.round(v/total*100)}%</span><b>${brl(v)}</b></div>`).join('');
+
+  $('#lista').innerHTML = itens.length ? itens.map(i => {
+    const dia = new Date(i.data + 'T12:00:00').toLocaleDateString('pt-BR', {day:'2-digit', month:'short'});
+    return `<div class="item"><i class="dot" style="background:${cor(i.categoria)}"></i>
+      <div><div class="d">${esc(i.descricao || i.categoria)}</div><div class="mut">${dia} · ${esc(i.categoria)}${i.origem==='whatsapp' ? ' · WhatsApp' : ''}</div></div>
+      <span class="v">${brl(i.valor)}</span><button class="x" data-id="${i.id}" aria-label="Apagar">×</button></div>`;
+  }).join('') : '<p class="mut">Mande um gasto pelo WhatsApp ou adicione abaixo.</p>';
+}
+
+$('#lista').addEventListener('click', async e => {
+  const id = e.target.dataset.id;
+  if (!id || !confirm('Apagar este gasto?')) return;
+  const { error } = await sb.from('gastos').delete().eq('id', id);
+  if (error) alert(error.message); else carregar();
+});
+
+$('#salvar').onclick = async () => {
+  const valor = parseFloat($('#val').value.replace(/\./g,'').replace(',','.'));
+  if (!(valor > 0)){ $('#aerr').textContent = 'Informe um valor maior que zero.'; return; }
+  const { error } = await sb.from('gastos').insert({
+    valor, categoria: $('#cat').value, descricao: $('#desc').value.trim() || null,
+    data: $('#dt').value || ymd(new Date()), origem: 'app'
+  });
+  if (error){ $('#aerr').textContent = error.message; return; }
+  $('#aerr').textContent = ''; $('#val').value = ''; $('#desc').value = '';
+  carregar();
+};
+
+$('#ant').onclick = () => { mes.setMonth(mes.getMonth()-1); carregar(); };
+$('#prox').onclick = () => { mes.setMonth(mes.getMonth()+1); carregar(); };
+
+$('#entrar').onclick = async () => {
+  const { error } = await sb.auth.signInWithPassword({ email: $('#em').value.trim(), password: $('#pw').value });
+  if (error){ $('#lerr').textContent = 'E-mail ou senha incorretos.'; return; }
+  iniciar();
+};
+$('#sair').onclick = async () => { await sb.auth.signOut(); tela(false); };
+
+async function iniciar(){
+  tela(true);
+  await carregar();
+  sb.channel('gastos-ao-vivo')
+    .on('postgres_changes', {event:'*', schema:'public', table:'gastos'}, carregar)
+    .subscribe();
+}
+
+(async () => {
+  const { data } = await sb.auth.getSession();
+  if (data.session) iniciar(); else tela(false);
+})();
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
